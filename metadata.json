@@ -1,0 +1,6 @@
+{
+  "name": "KLASSE",
+  "description": "Plataforma de gestión académica para docentes, con estética Bauhaus Neo-Brutalista, control de asistencia, ruletas de gamificación, simulador de escáner OCR y predictivos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

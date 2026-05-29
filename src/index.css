@@ -1,0 +1,225 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-parchment: #F5F5F0;
+  --color-bauhaus-yellow: #FFD700;
+  --color-bauhaus-blue: #0055FF;
+  --color-bauhaus-red: #FF3300;
+  --color-bauhaus-green: #10B981;
+}
+
+/* Custom Neo-Brutalist Classes */
+.neo-border {
+  border: 4px solid #1A1A1A;
+}
+
+.neo-border-thin {
+  border: 2px solid #1A1A1A;
+}
+
+.neo-shadow-yellow {
+  box-shadow: 4px 4px 0px 0px #1A1A1A;
+}
+
+.neo-shadow {
+  box-shadow: 4px 4px 0px 0px #1A1A1A;
+}
+
+.neo-shadow-lg {
+  box-shadow: 8px 8px 0px 0px #1A1A1A;
+}
+
+.neo-shadow-blue {
+  box-shadow: 6px 6px 0px 0px #0055FF;
+}
+
+.neo-shadow-yellow-lg {
+  box-shadow: 8px 8px 0px 0px #FFD700;
+}
+
+.neo-shadow-inset {
+  box-shadow: inset 4px 4px 0px 0px rgba(0, 0, 0, 0.1);
+}
+
+.neo-btn {
+  @apply font-sans font-bold uppercase transition-all duration-150 relative cursor-pointer active:translate-x-1 active:translate-y-1 active:shadow-none;
+}
+
+/* Base resets and transitions */
+body {
+  background-color: var(--bg-app, #F5F5F0);
+  color: var(--text-main, #1A1A1A);
+  font-family: var(--font-sans);
+  transition: background-color 0.25s ease, color 0.2s ease;
+}
+
+/* Theme definition root injections */
+.theme-bauhaus {
+  --bg-app: #F5F5F0;
+  --bg-card: #FFFFFF;
+  --bg-input: #FFFFFF;
+  --text-main: #1A1A1A;
+  --text-muted: #4B5563;
+  --border-main: #1A1A1A;
+  --shadow-main: #1A1A1A;
+}
+
+.theme-dark {
+  --bg-app: #121212;
+  --bg-card: #1C1C1E;
+  --bg-input: #2C2C2E;
+  --text-main: #F5F5F0;
+  --text-muted: #9CA3AF;
+  --border-main: #D1D5DB;
+  --shadow-main: #F5F5F0;
+}
+
+.theme-slate-dark {
+  --bg-app: #0F172A;
+  --bg-card: #1E293B;
+  --bg-input: #334155;
+  --text-main: #F1F5F9;
+  --text-muted: #94A3B8;
+  --border-main: #38BDF8;
+  --shadow-main: #F59E0B;
+}
+
+.theme-cyberpunk {
+  --bg-app: #0F051D;
+  --bg-card: #1A0B2E;
+  --bg-input: #2B154D;
+  --text-main: #00F0FF;
+  --text-muted: #DEC9FF;
+  --border-main: #FF007F;
+  --shadow-main: #00F0FF;
+}
+
+.theme-editorial {
+  --bg-app: #FDF6E2;
+  --bg-card: #FAFDF6;
+  --bg-input: #FDFCFA;
+  --text-main: #2E251A;
+  --text-muted: #736250;
+  --border-main: #4A3E30;
+  --shadow-main: #D97706;
+}
+
+/* Theme selector dynamic style overrides for full-scale injection */
+#app-container.theme-dark,
+#app-container.theme-slate-dark,
+#app-container.theme-cyberpunk,
+#app-container.theme-editorial {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+
+  /* Sidebars / main cards */
+  .bg-[#F5F5F0], .bg-parchment, .bg-slate-50, .bg-gray-50, .bg-\[\#F5F5F0\], .bg-\[\#f5f5f0\] {
+    background-color: var(--bg-app) !important;
+    color: var(--text-main);
+  }
+
+  .bg-white, .bg-[#FAF8F5], .bg-\[\#FAF8F5\] {
+    background-color: var(--bg-card) !important;
+    color: var(--text-main);
+  }
+
+  /* Specific widgets that need background updates */
+  aside, aside.bg-white, main, .bg-amber-50\/40, .bg-blue-50\/40, .bg-violet-50\/40 {
+    background-color: var(--bg-card) !important;
+    color: var(--text-main);
+  }
+
+  .text-[#1A1A1A], .text-black, .text-gray-900, .text-slate-900 {
+    color: var(--text-main) !important;
+  }
+
+  .text-gray-600, .text-gray-500, .text-gray-700, .text-slate-500, .text-zinc-600 {
+    color: var(--text-muted) !important;
+  }
+
+  /* Borders override */
+  .border, .border-2, .border-4, .border-black, .border-\[\#1A1A1A\], .border-gray-200, .border-gray-300, .border-gray-400, .neo-border, .neo-border-thin {
+    border-color: var(--border-main) !important;
+  }
+
+  /* Shadows override */
+  .neo-shadow, .neo-shadow-yellow, .neo-shadow-lg {
+    box-shadow: 4px 4px 0px 0px var(--shadow-main) !important;
+  }
+
+  .neo-shadow-yellow-lg {
+    box-shadow: 8px 8px 0px 0px var(--shadow-main) !important;
+  }
+
+  .neo-shadow-blue {
+    box-shadow: 4px 4px 0px 0px var(--shadow-main) !important;
+  }
+
+  /* Input elements styling */
+  input[type="text"], input[type="number"], select, textarea {
+    background-color: var(--bg-input) !important;
+    color: var(--text-main) !important;
+    border-color: var(--border-main) !important;
+  }
+
+  /* Table styles */
+  th {
+    border-color: var(--border-main) !important;
+  }
+
+  td {
+    border-color: var(--border-main) !important;
+  }
+
+  /* Interactive items hover state scaling */
+  .hover:bg-[#F5F5F0]:hover, .hover:bg-gray-50:hover, .hover:bg-[#FAF8F5]:hover {
+    background-color: var(--bg-input) !important;
+    color: var(--text-main) !important;
+    opacity: 0.9;
+  }
+}
+
+/* Custom Webkit scrollbar based on active theme */
+#app-container.theme-dark ::-webkit-scrollbar-track,
+#app-container.theme-slate-dark ::-webkit-scrollbar-track,
+#app-container.theme-cyberpunk ::-webkit-scrollbar-track,
+#app-container.theme-editorial ::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+
+#app-container.theme-dark ::-webkit-scrollbar-thumb,
+#app-container.theme-slate-dark ::-webkit-scrollbar-thumb,
+#app-container.theme-cyberpunk ::-webkit-scrollbar-thumb,
+#app-container.theme-editorial ::-webkit-scrollbar-thumb {
+  background: var(--border-main);
+  border-color: var(--bg-app);
+}
+
+/* Smooth custom scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #F5F5F0;
+  border-left: 2px solid #1A1A1A;
+}
+::-webkit-scrollbar-thumb {
+  background: #1A1A1A;
+  border: 2px solid #F5F5F0;
+}
+
+/* Sparkle / Scanner Animation */
+@keyframes scan-line {
+  0% { top: 0%; }
+  50% { top: 100%; }
+  100% { top: 0%; }
+}
+
+.scanner-overlay {
+  animation: scan-line 3s linear infinite;
+}
