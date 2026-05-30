@@ -52,6 +52,9 @@ export interface Student {
   cognitiveSkills: CognitiveSkills;
   behaviorLogs: BehaviorLog[];
   attendance: AttendanceRecord[];
+  gradesByPeriod?: { [periodId: string]: { [activityId: string]: number } };
+  attendanceByPeriod?: { [periodId: string]: AttendanceRecord[] };
+  behaviorByPeriod?: { [periodId: string]: BehaviorLog[] };
 }
 
 export interface AppSettings {
@@ -89,4 +92,6 @@ export interface Classroom {
     exam2: number; // percentage, e.g. 30
     project: number; // percentage, e.g. 20
   };
+  periods?: string[];
+  activePeriod?: string;
 }

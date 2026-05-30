@@ -8,7 +8,8 @@ import {
   ExternalLink,
   ArrowUpDown,
   SlidersHorizontal,
-  Mail
+  Mail,
+  Printer
 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -17,13 +18,15 @@ interface StudentDirectoryProps {
   onSelectStudent: (id: string) => void;
   onRemoveStudent: (id: string) => void;
   addSystemNotification: (msg: string, type: "info" | "success" | "warning") => void;
+  requestConfirm?: (title: string, message: string) => Promise<boolean>;
 }
 
 export default function StudentDirectory({ 
   students, 
   onSelectStudent, 
   onRemoveStudent,
-  addSystemNotification 
+  addSystemNotification,
+  requestConfirm
 }: StudentDirectoryProps) {
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,9 +85,12 @@ export default function StudentDirectory({
     addSystemNotification("Búsquedas, ordenamientos y filtros restablecidos", "info");
   };
 
-  const handleDeleteClick = (e: React.MouseEvent, id: string, name: string) => {
+  const handleDeleteClick = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation(); // Avoid selecting student details
-    if (window.confirm(`¿Está seguro de que desea eliminar permanentemente al estudiante "${name}"?`)) {
+    const confirmed = requestConfirm 
+      ? await requestConfirm("Eliminar Estudiante", `¿Está seguro de que desea eliminar permanentemente al estudiante "${name}"?`)
+      : window.confirm(`¿Está seguro de que desea eliminar permanentemente al estudiante "${name}"?`);
+    if (confirmed) {
       onRemoveStudent(id);
     }
   };
@@ -108,9 +114,17 @@ export default function StudentDirectory({
           </p>
         </div>
         
-        {/* Count Roster Info Badge */}
-        <div className="bg-[#1A1A1A] text-white py-1 px-3 neo-border-thin font-mono text-[10px] uppercase font-black">
-          Total Alumnos: {students.length}
+        {/* Count Roster Info Badge + Print */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { window.focus(); window.print(); }}
+            className="neo-btn bg-white hover:bg-[#F5F5F0] text-[#1A1A1A] py-1 px-3 neo-border-thin font-mono text-[10px] uppercase font-black cursor-pointer flex items-center gap-1 shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5 text-bauhaus-blue" /> Imprimir Lista
+          </button>
+          <div className="bg-[#1A1A1A] text-white py-1 px-3 neo-border-thin font-mono text-[10px] uppercase font-black">
+            Total Alumnos: {students.length}
+          </div>
         </div>
       </div>
 

@@ -16,7 +16,8 @@ import {
   Filter,
   UserCheck,
   Star,
-  Trash2
+  Trash2,
+  Printer
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -38,6 +39,7 @@ interface GradesManagementProps {
     periodName: string
   ) => void;
   addSystemNotification: (msg: string, type: "info" | "success" | "warning") => void;
+  requestConfirm?: (title: string, message: string) => Promise<boolean>;
 }
 
 export default function GradesManagement({
@@ -46,7 +48,8 @@ export default function GradesManagement({
   onUpdateStudent,
   activeClassroom,
   onUpdateClassroom,
-  addSystemNotification
+  addSystemNotification,
+  requestConfirm
 }: GradesManagementProps) {
 
   // Classroom grading settings local states
@@ -249,32 +252,6 @@ export default function GradesManagement({
     return result.sort((a, b) => a.name.localeCompare(b.name));
   }, [students, searchQuery, filterMode, activeClassroom]);
 
-  // Autofill empty or mock ranges helper for testing
-  const handleAutofillAll = () => {
-    if (window.confirm("¿Desea auto-rellenar notas aleatorias de prueba para todos los estudiantes según el rango de esta materia?")) {
-      const max = activeClassroom.maxGrade || 10;
-      const activities = activeClassroom.activities || [];
-      students.forEach(s => {
-        if (s.status === "Activo") {
-          const gen = () => Number((Math.random() * (max - (max * 0.4)) + (max * 0.4)).toFixed(1));
-          
-          const nextGrades = { ...s.grades };
-          activities.forEach(act => {
-            nextGrades[act.id] = gen();
-          });
-          // sync standard fallback keys as well
-          nextGrades.exam1 = nextGrades[activities[0]?.id] ?? gen();
-          nextGrades.homework1 = nextGrades[activities[1]?.id] ?? gen();
-          nextGrades.exam2 = nextGrades[activities[2]?.id] ?? gen();
-          nextGrades.project = nextGrades[activities[3]?.id] ?? gen();
-
-          onUpdateStudentGrades(s.id, nextGrades);
-        }
-      });
-      addSystemNotification("Calificaciones simuladas cargadas para evaluación", "success");
-    }
-  };
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
@@ -301,13 +278,6 @@ export default function GradesManagement({
           >
             <Sliders className="w-4 h-4 text-bauhaus-blue" />
             {isEditingSyllabus ? "Ocultar Acuerdo" : "Editar Acuerdo sobre Notas"}
-          </button>
-          
-          <button
-            onClick={handleAutofillAll}
-            className="neo-border px-3 py-2 text-[10px] font-mono hover:bg-[#1A1A1A] hover:text-white transition-colors cursor-pointer font-bold uppercase bg-white"
-          >
-            💡 Auto-rellenar Notas
           </button>
         </div>
       </div>
@@ -502,30 +472,39 @@ export default function GradesManagement({
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setFilterMode("all")}
+              className={`px-3 py-1.5 font-mono text-[10px] font-black uppercase neo-border-thin cursor-pointer ${
+                filterMode === "all" ? "bg-[#1A1A1A] text-white" : "bg-white text-[#1A1A1A] hover:bg-zinc-100"
+              }`}
+            >
+              Todos ({students.filter(s => s.status === "Activo").length})
+            </button>
+            <button
+              onClick={() => setFilterMode("approved")}
+              className={`px-3 py-1.5 font-mono text-[10px] font-black uppercase neo-border-thin cursor-pointer focus:outline-none ${
+                filterMode === "approved" ? "bg-emerald-700 text-white" : "bg-white text-emerald-800 hover:bg-emerald-50"
+              }`}
+            >
+              Aprobados ({students.filter(s => s.status === "Activo" && calculateWeightedAverage(s) >= (activeClassroom.passingGrade || 6)).length})
+            </button>
+            <button
+              onClick={() => setFilterMode("atRisk")}
+              className={`px-3 py-1.5 font-mono text-[10px] font-black uppercase neo-border-thin cursor-pointer ${
+                filterMode === "atRisk" ? "bg-rose-700 text-white" : "bg-white text-rose-800 hover:bg-rose-50"
+              }`}
+            >
+              Por debajo del Mínimo ({students.filter(s => s.status === "Activo" && calculateWeightedAverage(s) < (activeClassroom.passingGrade || 6)).length})
+            </button>
+          </div>
+          
           <button
-            onClick={() => setFilterMode("all")}
-            className={`px-3 py-1.5 font-mono text-[10px] font-black uppercase neo-border-thin cursor-pointer ${
-              filterMode === "all" ? "bg-[#1A1A1A] text-white" : "bg-white text-[#1A1A1A] hover:bg-zinc-100"
-            }`}
+            onClick={() => { window.focus(); window.print(); }}
+            className="neo-btn bg-white hover:bg-gray-100 text-[#1A1A1A] py-1.5 px-3 neo-border-thin flex items-center gap-1 text-[10px] font-mono cursor-pointer shadow-sm"
           >
-            Todos ({students.filter(s => s.status === "Activo").length})
-          </button>
-          <button
-            onClick={() => setFilterMode("approved")}
-            className={`px-3 py-1.5 font-mono text-[10px] font-black uppercase neo-border-thin cursor-pointer focus:outline-none ${
-              filterMode === "approved" ? "bg-emerald-700 text-white" : "bg-white text-emerald-800 hover:bg-emerald-50"
-            }`}
-          >
-            Aprobados ({students.filter(s => s.status === "Activo" && calculateWeightedAverage(s) >= (activeClassroom.passingGrade || 6)).length})
-          </button>
-          <button
-            onClick={() => setFilterMode("atRisk")}
-            className={`px-3 py-1.5 font-mono text-[10px] font-black uppercase neo-border-thin cursor-pointer ${
-              filterMode === "atRisk" ? "bg-rose-700 text-white" : "bg-white text-rose-800 hover:bg-rose-50"
-            }`}
-          >
-            Por debajo del Mínimo ({students.filter(s => s.status === "Activo" && calculateWeightedAverage(s) < (activeClassroom.passingGrade || 6)).length})
+            <Printer className="w-3.5 h-3.5 text-bauhaus-blue font-bold" /> IMPRIMIR PLANILLA
           </button>
         </div>
       </div>

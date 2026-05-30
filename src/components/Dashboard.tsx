@@ -20,7 +20,9 @@ import {
   Edit3,
   X,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Download,
+  Upload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -55,6 +57,7 @@ interface DashboardProps {
     periodName: string
   ) => void;
   onDeleteClassroom: (classroomId: string) => void;
+  onImportClassrooms: (classrooms: any) => void;
   settings?: any;
   googleUser?: any;
   isSyncing?: boolean;
@@ -72,12 +75,53 @@ export default function Dashboard({
   onCreateClassroom,
   onUpdateClassroom,
   onDeleteClassroom,
+  onImportClassrooms,
   settings,
   googleUser,
   isSyncing,
   onManualBackup
 }: DashboardProps) {
   
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        onImportClassrooms(json);
+      } catch (err) {
+        addSystemNotification("El archivo seleccionado no es un JSON válido o está dañado.", "warning");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleExportClassroom = (cls: Classroom) => {
+    try {
+      const blob = new Blob([JSON.stringify(cls, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Clase_${cls.name.replace(/\s+/g, "_")}_Completa.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      addSystemNotification(`Se ha descargado la clase "${cls.name}" con todos sus datos exitosamente.`, "success");
+    } catch (err) {
+      addSystemNotification("Ocurrió un error al intentar exportar la clase.", "warning");
+    }
+  };
+
   // Local state for classroom creation
   const [newClassName, setNewClassName] = useState("");
   const [newClassInst, setNewClassInst] = useState("");
@@ -452,12 +496,27 @@ export default function Dashboard({
             </div>
           </div>
 
-          <button
-            onClick={() => setIsAddingClass(!isAddingClass)}
-            className="neo-btn bg-bauhaus-yellow text-black py-2 px-4 neo-border neo-shadow text-xs font-bold uppercase hover:bg-[#F3A600] cursor-pointer flex items-center gap-1.5 self-start md:self-auto font-black"
-          >
-            {isAddingClass ? "✖ Cancelar" : "➕ Nueva Clase"}
-          </button>
+          <div className="flex flex-wrap gap-2 self-start md:self-auto">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileChange} 
+              accept=".json" 
+              className="hidden" 
+            />
+            <button
+              onClick={handleImportClick}
+              className="neo-btn bg-white text-black py-2 px-4 neo-border neo-shadow text-xs font-bold uppercase hover:bg-zinc-100 cursor-pointer flex items-center gap-1.5 font-black"
+            >
+              <Upload className="w-4 h-4 text-bauhaus-blue font-bold" /> Importar Clase
+            </button>
+            <button
+              onClick={() => setIsAddingClass(!isAddingClass)}
+              className="neo-btn bg-bauhaus-yellow text-black py-2 px-4 neo-border neo-shadow text-xs font-bold uppercase hover:bg-[#F3A600] cursor-pointer flex items-center gap-1.5 font-black"
+            >
+              {isAddingClass ? "✖ Cancelar" : "➕ Nueva Clase"}
+            </button>
+          </div>
         </div>
 
         {isAddingClass && (
@@ -603,6 +662,13 @@ export default function Dashboard({
                     
                     {/* Inline actions inside the Classroom switcher card */}
                     <div className="flex items-center gap-1 z-15" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        title="Exportar y descargar clase completa (JSON)"
+                        onClick={() => handleExportClassroom(cls)}
+                        className="p-1 bg-white hover:bg-amber-400 hover:text-black border border-[#1A1A1A] rounded-sm transition-colors cursor-pointer"
+                      >
+                        <Download className="w-3 h-3" />
+                      </button>
                       <button
                         title="Modificar parámetros"
                         onClick={() => {

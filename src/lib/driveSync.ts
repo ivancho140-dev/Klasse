@@ -30,8 +30,6 @@ export const initAuth = (
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
         // Token might have expired or not cached yet on refresh
-        // On refresh we might need to log in again to get fresh credentials with scoping,
-        // but we keep the current session safe.
         if (onAuthFailure) onAuthFailure();
       }
     } else {

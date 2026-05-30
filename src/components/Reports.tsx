@@ -11,7 +11,8 @@ import {
   Download,
   Percent,
   Sparkles,
-  HelpCircle
+  HelpCircle,
+  Printer
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -25,10 +26,7 @@ export default function Reports({ students, activeClassroom, addSystemNotificati
 
   // Advanced dynamic filters
   const [selectedActivity, setSelectedActivity] = useState<string>("Todos");
-  const [selectedGroup, setSelectedGroup] = useState<string>("Todos");
   const [selectedPerformance, setSelectedPerformance] = useState<string>("Todos");
-
-  const filterGroupsList = ["Todos", "A", "B", "C"];
 
   const filterActivitiesList = useMemo(() => {
     const list = [{ id: "Todos", name: "🏆 Promedio Ponderado" }];
@@ -67,8 +65,6 @@ export default function Reports({ students, activeClassroom, addSystemNotificati
   // Filter students based on selection
   const targetStudents = useMemo(() => {
     return students.filter(s => {
-      const matchGrp = selectedGroup === "Todos" || s.group === selectedGroup;
-      
       const score = getStudentScore(s);
       let matchPerf = true;
       if (selectedPerformance === "aprobado") {
@@ -77,9 +73,9 @@ export default function Reports({ students, activeClassroom, addSystemNotificati
         matchPerf = score < passingThreshold;
       }
       
-      return matchGrp && matchPerf;
+      return matchPerf;
     });
-  }, [students, selectedActivity, selectedGroup, selectedPerformance, activeClassroom]);
+  }, [students, selectedActivity, selectedPerformance, activeClassroom]);
 
   // Calculations
   const metrics = useMemo(() => {
@@ -194,29 +190,82 @@ export default function Reports({ students, activeClassroom, addSystemNotificati
     };
   }, [predictStudentId, students, selectedActivity, activeClassroom]);
 
+  const exportToExcelReal = () => {
+    try {
+      const headers = [
+        "Estudiante",
+        "Grupo",
+        "Asistencia (%)",
+        "Puntos Extra (Karmas)",
+        "Estado",
+        ...((activeClassroom.activities || []).map(a => a.name)),
+        "Nota Final"
+      ];
+
+      const rows = targetStudents.map(s => {
+        const presentCount = s.attendance ? s.attendance.filter(a => a.status === "presente").length : 0;
+        const totalAttendance = s.attendance ? s.attendance.length : 0;
+        const attendancePct = totalAttendance > 0 ? ((presentCount / totalAttendance) * 100).toFixed(0) : "100";
+        
+        const activityScores = (activeClassroom.activities || []).map(act => s.grades[act.id] ?? 0);
+        const finalScore = getStudentScore(s);
+
+        return [
+          s.name,
+          s.group,
+          `${attendancePct}%`,
+          s.points || 0,
+          s.status,
+          ...activityScores,
+          finalScore
+        ];
+      });
+
+      const csvContent = "\uFEFF" + [
+        headers.join(","),
+        ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Reporte_Calificaciones_${activeClassroom.name.replace(/\s+/g, "_")}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      addSystemNotification("Ocurrió un error al intentar generar la exportación de Excel.", "warning");
+    }
+  };
+
   // Handles export button clicks
   const triggerSimulationExport = (type: "pdf" | "excel") => {
     setExportType(type);
     setExportProgress(0);
 
+    let progressVal = 0;
     const intv = setInterval(() => {
-      setExportProgress(p => {
-        if (p >= 100) {
-          clearInterval(intv);
-          setTimeout(() => {
-            setExportType(null);
-            addSystemNotification(
-              type === "pdf" 
-                ? "Compilación PDF final descargada correctamente" 
-                : "Se ha compilado la planilla de asistencia XLS con éxito", 
-              "success"
-            );
-          }, 300);
-          return 100;
-        }
-        return p + 20;
-      });
-    }, 250);
+      progressVal += 20;
+      if (progressVal >= 100) {
+        clearInterval(intv);
+        setExportProgress(100);
+        setTimeout(() => {
+          setExportType(null);
+          window.focus();
+          if (type === "excel") {
+            exportToExcelReal();
+            addSystemNotification("Se ha descargado la matriz de calificaciones CSV con éxito.", "success");
+          } else if (type === "pdf") {
+            window.print();
+            addSystemNotification("Planilla de impresión enviada al sistema de impresión nativo.", "success");
+          }
+        }, 300);
+      } else {
+        setExportProgress(progressVal);
+      }
+    }, 150);
   };
 
   return (
@@ -255,6 +304,13 @@ export default function Reports({ students, activeClassroom, addSystemNotificati
             className="neo-btn bg-white hover:bg-gray-100 text-[#1A1A1A] py-2 px-3 neo-border-thin flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4" /> EXPORTAR EXCEL
+          </button>
+          <button 
+            id="btn-report-print"
+            onClick={() => { window.focus(); window.print(); }}
+            className="neo-btn bg-[#FFD214] hover:bg-amber-400 text-black py-2 px-3 neo-border-thin flex items-center gap-1.5 cursor-pointer font-bold"
+          >
+            <Printer className="w-4 h-4" /> IMPRIMIR INFORME
           </button>
         </div>
       </div>
@@ -302,19 +358,6 @@ export default function Reports({ students, activeClassroom, addSystemNotificati
               className="p-1 px-2 font-mono text-xs bg-white focus:outline-none"
             >
               {filterActivitiesList.map(act => <option key={act.id} value={act.id}>{act.name}</option>)}
-            </select>
-          </div>
-
-          {/* Group Filter */}
-          <div className="flex items-center bg-white neo-border-thin">
-            <span className="bg-[#1A1A1A] text-white px-2 py-1 font-mono text-[9px] uppercase font-bold">Grupo</span>
-            <select 
-              id="report-group-select"
-              value={selectedGroup}
-              onChange={(e) => setSelectedGroup(e.target.value)}
-              className="p-1 px-2 font-mono text-xs bg-white focus:outline-none"
-            >
-              {filterGroupsList.map(g => <option key={g} value={g}>{g === "Todos" ? "Todos" : `Grupo ${g}`}</option>)}
             </select>
           </div>
 
@@ -436,7 +479,7 @@ export default function Reports({ students, activeClassroom, addSystemNotificati
                     <div className="min-w-0">
                       <h4 className="font-extrabold text-xs text-[#1A1A1A] truncate pr-8">{student.name}</h4>
                       <p className="text-[10px] text-gray-500 font-mono">
-                        Asistencia: {((student.attendance.filter(a => a.status === "presente").length / Math.max(1, student.attendance.length)) * 100).toFixed(0)}%
+                        Asistencia: {student.attendance && student.attendance.length > 0 ? ((student.attendance.filter(a => a.status === "presente").length / student.attendance.length) * 100).toFixed(0) : "100"}%
                       </p>
                     </div>
                   </div>

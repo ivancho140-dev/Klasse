@@ -57,7 +57,9 @@ export default function App() {
             passingGrade: c.passingGrade ?? 6,
             periodType: c.periodType ?? "trimestre",
             periodName: c.periodName ?? "Trimestre 1 Escolar",
-            activities: mergedActivities
+            activities: mergedActivities,
+            periods: c.periods ?? ["Semestre 1", "Semestre 2"],
+            activePeriod: c.activePeriod ?? "Semestre 1"
           };
         });
       } catch (e) {
@@ -91,7 +93,9 @@ export default function App() {
           { id: "exam2", name: "Examen 2", weight: 30 },
           { id: "project", name: "Proyecto", weight: 20 }
         ],
-        students: migratedStudents
+        students: migratedStudents,
+        periods: ["Semestre 1", "Semestre 2"],
+        activePeriod: "Semestre 1"
       }
     ];
   });
@@ -121,15 +125,17 @@ export default function App() {
     students: []
   };
 
-  const students = activeClassroom.students;
+  const students = React.useMemo(() => {
+    return activeClassroom.students || [];
+  }, [activeClassroom.students]);
 
   // State dispatcher shim so list mutations operate on the active classroom transparently
   const setStudents = (updater: React.SetStateAction<Student[]>) => {
     setClassrooms((prev) =>
       prev.map((c) => {
         if (c.id === activeClassroom.id) {
-          const nextStudents = typeof updater === "function" 
-            ? (updater as (prev: Student[]) => Student[])(c.students) 
+          const nextStudents = typeof updater === "function"
+            ? (updater as (prev: Student[]) => Student[])(c.students || [])
             : updater;
           return { ...c, students: nextStudents };
         }
@@ -163,6 +169,20 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<string>("dashboard");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
+  const [isOnline, setIsOnline] = useState(true); // Default to online for general triggers
+
+  React.useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
   // Classroom handlers
   const handleSelectClassroom = (classroomId: string) => {
     setActiveClassroomId(classroomId);
@@ -180,7 +200,7 @@ export default function App() {
     periodName: string = "Trimestre 1 Escolar"
   ) => {
     const newClassroom: Classroom = {
-      id: `class-${Date.now()}`,
+      id: `class-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       name,
       institution,
       schedule,
@@ -197,7 +217,9 @@ export default function App() {
       ],
       students: [],
       activityNames: { exam1: "Examen 1", homework1: "Tarea 1", exam2: "Examen 2", project: "Proyecto" },
-      activityWeights: { exam1: 30, homework1: 20, exam2: 30, project: 20 }
+      activityWeights: { exam1: 30, homework1: 20, exam2: 30, project: 20 },
+      periods: ["Semestre 1", "Semestre 2"],
+      activePeriod: "Semestre 1"
     };
     setClassrooms((prev) => [...prev, newClassroom]);
     setActiveClassroomId(newClassroom.id);
@@ -245,7 +267,9 @@ export default function App() {
             periodType,
             periodName,
             activityNames: actNamesOld,
-            activityWeights: actWeightsOld
+            activityWeights: actWeightsOld,
+            periods: c.periods ?? ["Semestre 1", "Semestre 2"],
+            activePeriod: c.activePeriod ?? "Semestre 1"
           };
         }
         return c;
@@ -269,6 +293,102 @@ export default function App() {
       setSelectedStudentId(null);
     }
     addSystemNotification("Materia purgada con éxito del panel docente", "warning");
+  };
+
+  const handleImportClassrooms = (importedData: any) => {
+    try {
+      let importedList: Classroom[] = [];
+      if (Array.isArray(importedData)) {
+        importedList = importedData;
+      } else if (importedData && typeof importedData === "object") {
+        if (importedData.id && importedData.name) {
+          importedList = [importedData];
+        } else if (importedData.classrooms && Array.isArray(importedData.classrooms)) {
+          importedList = importedData.classrooms;
+        } else {
+          throw new Error("Formato inválido");
+        }
+      } else {
+        throw new Error("Formato inválido");
+      }
+
+      const validated: Classroom[] = [];
+      const timestamp = Date.now();
+      importedList.forEach((cls, index) => {
+        if (cls.name && Array.isArray(cls.students)) {
+          validated.push({
+            ...cls,
+            id: cls.id ? `${cls.id}-import-${timestamp}-${index}` : `class-import-${timestamp}-${index}`,
+            name: cls.name.endsWith("(Importada)") ? cls.name : `${cls.name} (Importada)`
+          });
+        }
+      });
+
+      if (validated.length === 0) {
+        addSystemNotification("No se encontraron clases válidas para importar.", "warning");
+        return;
+      }
+
+      setClassrooms((prev) => [...prev, ...validated]);
+      setActiveClassroomId(validated[0].id);
+      addSystemNotification(`Se importaron ${validated.length} clase(s) correctamente.`, "success");
+    } catch (err) {
+      addSystemNotification("Error al procesar el archivo. Verifique el formato.", "warning");
+    }
+  };
+
+  // ==========================================
+  // Custom Accessible Dialog Overlay (Iframe-safe)
+  // ==========================================
+  const [customDialog, setCustomDialog] = useState<{
+    isOpen: boolean;
+    type: "confirm" | "prompt";
+    title: string;
+    message: string;
+    defaultValue?: string;
+    placeholder?: string;
+    onResolve: (result: any) => void;
+  }>({
+    isOpen: false,
+    type: "confirm",
+    title: "",
+    message: "",
+    onResolve: () => {},
+  });
+
+  const [dialogInput, setDialogInput] = useState("");
+
+  const requestConfirm = (title: string, message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setCustomDialog({
+        isOpen: true,
+        type: "confirm",
+        title,
+        message,
+        onResolve: (res) => {
+          setCustomDialog((prev) => ({ ...prev, isOpen: false }));
+          resolve(!!res);
+        },
+      });
+    });
+  };
+
+  const requestPrompt = (title: string, message: string, defaultValue = "", placeholder = ""): Promise<string | null> => {
+    setDialogInput(defaultValue);
+    return new Promise((resolve) => {
+      setCustomDialog({
+        isOpen: true,
+        type: "prompt",
+        title,
+        message,
+        defaultValue,
+        placeholder,
+        onResolve: (res) => {
+          setCustomDialog((prev) => ({ ...prev, isOpen: false }));
+          resolve(res);
+        },
+      });
+    });
   };
 
   // ==========================================
@@ -392,6 +512,11 @@ export default function App() {
           "✓ Archivo con clases múltiples descargado e interpretado correctamente.",
           `📥 Se restauraron ${data.classrooms.length} clases y registros desde la nube.`
         ]);
+        setSettings(prev => ({
+          ...prev,
+          googleDriveSynced: true,
+          lastSyncDate: data.syncDate || new Date().toLocaleString()
+        }));
         addSystemNotification(`Copia de seguridad de clases restaurada (${data.classrooms.length} clases)`, "success");
       } else if (data.students && Array.isArray(data.students)) {
         setClassrooms([
@@ -414,6 +539,11 @@ export default function App() {
           "✓ Archivo descargado e interpretado en esquema heredado correctamente.",
           `📥 Se restauraron ${data.students.length} alumnos en la clase inicial.`
         ]);
+        setSettings(prev => ({
+          ...prev,
+          googleDriveSynced: true,
+          lastSyncDate: data.syncDate || new Date().toLocaleString()
+        }));
         addSystemNotification(`Copia de seguridad restaurada (${data.students.length} alumnos)`, "success");
       } else {
         throw new Error("El archivo JSON del respaldo tiene un formato incompatible.");
@@ -448,12 +578,38 @@ export default function App() {
 
   const triggerGoogleLogout = async () => {
     try {
-      await googleSignOut();
+      try {
+        await googleSignOut();
+      } catch (authErr) {
+        console.warn("[Auth Signout warning] Ignored Firebase state rejection while purging local data:", authErr);
+      }
       setGoogleUser(null);
       setGoogleToken(null);
-      addSystemNotification("Sesión educativa de Google cerrada correctamente", "info");
+      
+      // Clean local storage completely
+      localStorage.removeItem("klasse_classrooms");
+      localStorage.removeItem("klasse_active_classroom_id");
+      localStorage.removeItem("klasse_settings");
+      localStorage.removeItem("klasse_google_token");
+      
+      // Reset state to an educational clean slate
+      setClassrooms([]);
+      setActiveClassroomId("");
+      setSettings({
+        googleDriveSynced: false,
+        lastSyncDate: null,
+        notificationsEnabled: true,
+        academicYear: "2026 - Ciclo Activo",
+        offlineMode: true,
+        dangerZoneActive: false,
+        theme: "bauhaus", // Accessible neutral light mode
+        teacherName: ""
+      });
+      
+      addSystemNotification("Cuenta desvinculada. Se han purgado todos los datos locales para un nuevo inicio limpio.", "success");
     } catch (e: any) {
       console.error(e);
+      addSystemNotification("Error al desvincular la cuenta", "warning");
     }
   };
 
@@ -469,7 +625,7 @@ export default function App() {
 
   const addSystemNotification = (text: string, type: "info" | "success" | "warning" = "info") => {
     if (!settings.notificationsEnabled) return;
-    const id = Date.now().toString();
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     setNotifications((prev) => [...prev, { id, text, type }]);
 
     // auto dismiss
@@ -663,18 +819,32 @@ export default function App() {
       <main className="flex-1 p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full overflow-x-hidden space-y-8">
         
         {/* Top Header Indicators */}
-        <header className="hidden md:flex justify-between items-center border-b-2 border-gray-200 pb-4 select-none">
-          <div className="flex items-center gap-4 text-xs font-mono text-gray-600">
-            <span>PERIODO: <strong>{settings.academicYear}</strong></span>
-            <span className="border-l border-gray-300 pl-4">MATERIA EN GESTIÓN: <strong className="text-bauhaus-blue uppercase">{activeClassroom.name}</strong></span>
-            <span className="border-l border-gray-300 pl-4">ALUMNOS: <strong>{students.length}</strong></span>
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center border-b-2 border-gray-200 pb-4 gap-4 select-none">
+          <div className="flex flex-col gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono text-gray-600">
+              <span>PERIODO: <strong>{settings.academicYear}</strong></span>
+              {activeClassroom.id && (
+                <>
+                  <span className="border-l border-gray-300 pl-4">MATERIA EN GESTIÓN: <strong className="text-bauhaus-blue uppercase">{activeClassroom.name}</strong></span>
+                  <span className="border-l border-gray-300 pl-4">ALUMNOS: <strong>{students.length}</strong></span>
+                </>
+              )}
+            </div>
+
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-1.5 font-mono text-[10px] py-1 px-3 neo-border-thin bg-emerald-50 text-emerald-800`}>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-              <span>EMERGENCIA LOCAL: 100% OK</span>
-            </div>
+          <div className="flex items-center gap-4 self-stretch md:self-auto justify-between md:justify-end shrink-0">
+            {isOnline ? (
+              <div className="flex items-center gap-1.5 font-mono text-[10px] py-1 px-3 neo-border-thin bg-emerald-50 text-emerald-800 border-emerald-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                <span>BAUHAUS PORTAL: LOCAL GUARDADO ACTIVO</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 font-mono text-[10px] py-1 px-3 neo-border-thin bg-amber-50 text-amber-800 border-amber-300">
+                <span className="w-2 h-2 rounded-full bg-amber-500 inline-block animate-pulse"></span>
+                <span>MODO OFFLINE: DATOS RESPALDADOS EN DISPOSITIVO</span>
+              </div>
+            )}
           </div>
         </header>
 
@@ -776,6 +946,7 @@ export default function App() {
                   onCreateClassroom={handleCreateClassroom}
                   onUpdateClassroom={handleUpdateClassroom}
                   onDeleteClassroom={handleDeleteClassroom}
+                  onImportClassrooms={handleImportClassrooms}
                   settings={settings}
                   googleUser={googleUser}
                   isSyncing={isDriveSyncing}
@@ -788,11 +959,13 @@ export default function App() {
                   /* Drilling down to Profile detail view inside Directory tab space */
                   <StudentProfile 
                     student={selectedStudent} 
+                    activeClassroom={activeClassroom}
                     onClose={() => setSelectedStudentId(null)}
                     onUpdateStudentGrades={handleUpdateStudentGrades}
                     onAddBehaviorLog={handleAddBehaviorLog}
                     onRemoveBehaviorLog={handleRemoveBehaviorLog}
                     addSystemNotification={addSystemNotification}
+                    requestConfirm={requestConfirm}
                   />
                 ) : (
                   /* Core list view matrix */
@@ -801,6 +974,7 @@ export default function App() {
                     onSelectStudent={(id) => setSelectedStudentId(id)}
                     onRemoveStudent={handleRemoveStudent}
                     addSystemNotification={addSystemNotification}
+                    requestConfirm={requestConfirm}
                   />
                 )
               )}
@@ -813,6 +987,7 @@ export default function App() {
                   onUpdateClassroom={handleUpdateClassroom}
                   onUpdateStudent={handleUpdateStudentFields}
                   addSystemNotification={addSystemNotification}
+                  requestConfirm={requestConfirm}
                 />
               )}
 
@@ -855,6 +1030,7 @@ export default function App() {
                   syncLogs={driveSyncLogs}
                   onManualBackup={() => triggerRealBackup()}
                   onManualRestore={triggerRealRestore}
+                  requestConfirm={requestConfirm}
                 />
               )}
             </>
@@ -902,6 +1078,66 @@ export default function App() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Custom Accessible Dialog Overlay */}
+      <AnimatePresence>
+        {customDialog.isOpen && (
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-[2px]">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[var(--bg-card)] text-[var(--text-main)] border-4 border-black p-6 shadow-[6px_6px_0px_0px_var(--shadow-main)] space-y-6"
+            >
+              <div className="border-b-2 border-black pb-2 flex items-center justify-between">
+                <h3 className="text-lg font-black uppercase tracking-wider font-sans">
+                  💬 {customDialog.title}
+                </h3>
+              </div>
+
+              <div className="space-y-4">
+                <p className="font-mono text-xs leading-relaxed text-[var(--text-muted)] whitespace-pre-wrap">
+                  {customDialog.message}
+                </p>
+
+                {customDialog.type === "prompt" && (
+                  <input
+                    type="text"
+                    required
+                    value={dialogInput}
+                    onChange={(e) => setDialogInput(e.target.value)}
+                    placeholder={customDialog.placeholder || "Escriba aquí..."}
+                    className="w-full bg-[var(--bg-input)] text-[var(--text-main)] border-2 border-black p-3 text-xs font-mono focus:outline-none"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        customDialog.onResolve(dialogInput);
+                      }
+                    }}
+                  />
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 font-mono text-xs pt-4 border-t-2 border-dashed border-black">
+                <button
+                  type="button"
+                  onClick={() => customDialog.onResolve(customDialog.type === "prompt" ? null : false)}
+                  className="px-4 py-2 bg-white text-black font-semibold border-2 border-black hover:bg-gray-100 transition-colors uppercase cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => customDialog.onResolve(customDialog.type === "prompt" ? dialogInput : true)}
+                  className="px-5 py-2 bg-bauhaus-blue text-white font-black border-2 border-[#1A1A1A] shadow-[2px_2px_0px_0px_#141414] hover:bg-blue-750 transition-all uppercase cursor-pointer"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

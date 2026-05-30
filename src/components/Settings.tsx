@@ -28,6 +28,7 @@ interface SettingsProps {
   syncLogs: string[];
   onManualBackup: () => void;
   onManualRestore: () => void;
+  requestConfirm?: (title: string, message: string) => Promise<boolean>;
 }
 
 export default function SettingsComponent({
@@ -41,7 +42,8 @@ export default function SettingsComponent({
   isSyncing,
   syncLogs,
   onManualBackup,
-  onManualRestore
+  onManualRestore,
+  requestConfirm
 }: SettingsProps) {
 
   // Double lock danger zone local state
@@ -68,13 +70,17 @@ export default function SettingsComponent({
     }
   };
 
-  const handleResetClick = () => {
+  const handleResetClick = async () => {
     if (!isDangerUnlocked) {
       addSystemNotification("Debe deslizar el interruptor de seguridad de la Zona Crítica primero", "warning");
       return;
     }
 
-    if (window.confirm("🔴 ATENCIÓN: Esta acción purgará de forma definitiva TODAS las modificaciones de notas, asistencias e incidentes registrados hoy. Se restablecerán los estudiantes predeterminados de fábrica. ¿Desea proceder?")) {
+    const confirmed = requestConfirm 
+      ? await requestConfirm("Restablecer Portal", "🔴 ATENCIÓN: Esta acción purgará de forma definitiva TODAS las modificaciones de notas, asistencias e incidentes registrados hoy. Se restablecerán los estudiantes predeterminados de fábrica. ¿Desea proceder?")
+      : window.confirm("🔴 ATENCIÓN: Esta acción purgará de forma definitiva TODAS las modificaciones de notas, asistencias e incidentes registrados hoy. Se restablecerán los estudiantes predeterminados de fábrica. ¿Desea proceder?");
+
+    if (confirmed) {
       onResetDatabase();
       setIsDangerUnlocked(false);
     }
@@ -166,10 +172,17 @@ export default function SettingsComponent({
                   </div>
                   <button
                     type="button"
-                    onClick={onGoogleLogout}
-                    className="text-[9px] text-red-600 font-mono font-bold uppercase underline hover:text-rose-800 cursor-pointer"
+                    onClick={async () => {
+                      const confirmed = requestConfirm 
+                        ? await requestConfirm("Desvincular Cuenta", "¿Está seguro que desea desvincular su cuenta de Google Workspace? Se desactivarán los respaldos automatizados en la nube hasta que vuelva a iniciar sesión.")
+                        : window.confirm("¿Está seguro que desea desvincular su cuenta de Google Workspace? Se desactivarán los respaldos automatizados en la nube hasta que vuelva a iniciar sesión.");
+                      if (confirmed) {
+                        onGoogleLogout();
+                      }
+                    }}
+                    className="px-3.5 py-1.5 bg-bauhaus-red text-white font-black font-mono text-[10px] uppercase rounded-sm border-2 border-black shadow-[2px_2px_0px_0px_#1A1A1A] hover:bg-red-700 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1"
                   >
-                    Cerrar Cuenta
+                    🚪 DESVINCULAR CUENTA
                   </button>
                 </div>
 
@@ -304,17 +317,16 @@ export default function SettingsComponent({
               </div>
 
               <div>
-                <label className="block font-black text-gray-700 uppercase mb-1">Año Académico / Ciclo Activo:</label>
-                <select 
+                <label className="block font-black text-gray-700 uppercase mb-1">Año Académico, Periodo o Ciclo:</label>
+                <input 
+                  type="text"
                   id="settings-academic-year"
-                  value={settings.academicYear}
+                  required
+                  value={settings.academicYear || ""}
                   onChange={(e) => onUpdateSettings({ ...settings, academicYear: e.target.value })}
+                  placeholder="Ej. Semestre 1 - 2026 o Año Lectivo 25-26"
                   className="w-full bg-white neo-border-thin p-2 focus:outline-none"
-                >
-                  <option value="2026 - Trimestre 1">Trimestre 1 (Periodo Vigente)</option>
-                  <option value="2026 - Trimestre 2">Trimestre 2 (Periodo Entrante)</option>
-                  <option value="2026 - Semestre 1">Semestre Activo 1</option>
-                </select>
+                />
               </div>
 
               {/* Toggles item checks block */}

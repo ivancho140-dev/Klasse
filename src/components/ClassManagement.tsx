@@ -15,7 +15,15 @@ import {
   User,
   Users2,
   Zap,
-  Volume2
+  Volume2,
+  Printer,
+  Play,
+  Pause,
+  RotateCcw,
+  Coffee,
+  Maximize2,
+  Minimize2,
+  Monitor
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -33,8 +41,185 @@ export default function ClassManagement({
   addSystemNotification
 }: ClassManagementProps) {
 
-  // Sub-tabs: attendance, randomWheel, groupGenerator, rewardsPanel
-  const [activeSubTab, setActiveSubTab] = useState<"attendance" | "wheel" | "groups" | "behaviors">("attendance");
+  // Sub-tabs: attendance, randomWheel, groupGenerator, rewardsPanel, pomodoro
+  const [activeSubTab, setActiveSubTab] = useState<"attendance" | "wheel" | "groups" | "behaviors" | "pomodoro">("attendance");
+
+  // Pomodoro Timer States
+  const [pomodoroMode, setPomodoroMode] = useState<"trabajo" | "corto" | "largo">("trabajo");
+  const [customWorkMin, setCustomWorkMin] = useState<number>(25);
+  const [customShortMin, setCustomShortMin] = useState<number>(5);
+  const [customLongMin, setCustomLongMin] = useState<number>(15);
+  const [pomodoroTime, setPomodoroTime] = useState<number>(25 * 60); // initially 25 min
+  const [pomodoroActive, setPomodoroActive] = useState<boolean>(false);
+  const [pomodoroCycles, setPomodoroCycles] = useState<number>(0);
+  const [pomodoroTask, setPomodoroTask] = useState<string>("");
+
+  // Classroom Timer & Stopwatch States
+  const [activeTimerTool, setActiveTimerTool] = useState<"pomodoro" | "classroom_timer">("pomodoro");
+  const [classroomTimerType, setClassroomTimerType] = useState<"countdown" | "stopwatch">("countdown");
+  const [classroomTimerActive, setClassroomTimerActive] = useState<boolean>(false);
+  const [classroomTimerSeconds, setClassroomTimerSeconds] = useState<number>(10 * 60);
+  const [classroomTimerInputMin, setClassroomTimerInputMin] = useState<number>(10);
+  const [classroomTimerTask, setClassroomTimerTask] = useState<string>("Lectura Silenciosa");
+  const [projectorModeActive, setProjectorModeActive] = useState<boolean>(false);
+  const [projectorTheme, setProjectorTheme] = useState<"dark" | "light" | "bauhaus">("dark");
+
+  React.useEffect(() => {
+    let interval: any = null;
+    if (classroomTimerActive) {
+      interval = setInterval(() => {
+        setClassroomTimerSeconds((prev) => {
+          if (classroomTimerType === "countdown") {
+            if (prev <= 1) {
+              clearInterval(interval);
+              setClassroomTimerActive(false);
+
+              // Sound alert
+              try {
+                const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const playBeep = (freq: number, startTime: number, duration: number) => {
+                  const osc = ctx.createOscillator();
+                  const gain = ctx.createGain();
+                  osc.type = "sine";
+                  osc.frequency.setValueAtTime(freq, startTime);
+                  gain.gain.setValueAtTime(0.15, startTime);
+                  gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration - 0.05);
+                  osc.connect(gain);
+                  gain.connect(ctx.destination);
+                  osc.start(startTime);
+                  osc.stop(startTime + duration);
+                };
+                playBeep(660, ctx.currentTime, 0.15);
+                playBeep(660, ctx.currentTime + 0.2, 0.15);
+                playBeep(880, ctx.currentTime + 0.4, 0.4);
+              } catch (err) {
+                console.log("AudioContext blocked or unavailable", err);
+              }
+
+              addSystemNotification(`⏰ El tiempo para "${classroomTimerTask || "Actividad Escolar"}" ha finalizado correctamente.`, "success");
+              return 0;
+            }
+            return prev - 1;
+          } else {
+            // stopwatch: goes up
+            return prev + 1;
+          }
+        });
+      }, 1000);
+    } else {
+      if (interval) clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [classroomTimerActive, classroomTimerType, classroomTimerTask]);
+
+  React.useEffect(() => {
+    let interval: any = null;
+    if (pomodoroActive) {
+      interval = setInterval(() => {
+        setPomodoroTime((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setPomodoroActive(false);
+
+            // Play retro sound Synthesizer using AudioContext
+            try {
+              const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = "sine";
+              osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+              osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.3);
+              gain.gain.setValueAtTime(0.12, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.5);
+            } catch (err) {
+              console.log("Audio not allowed yet or unsupported", err);
+            }
+
+            // Determine next mode
+            let nextMode: "trabajo" | "corto" | "largo" = "trabajo";
+            let nextSeconds = customWorkMin * 60;
+            let message = "";
+
+            if (pomodoroMode === "trabajo") {
+              const nextCycles = pomodoroCycles + 1;
+              setPomodoroCycles(nextCycles);
+              if (nextCycles % 4 === 0) {
+                nextMode = "largo";
+                nextSeconds = customLongMin * 60;
+                message = "🎯 ¡Excelente! Ciclo de trabajo de Pomodoro completado. Toma un descanso largo de " + customLongMin + " minutos.";
+              } else {
+                nextMode = "corto";
+                nextSeconds = customShortMin * 60;
+                message = "🎯 ¡Buen trabajo! Ciclo de trabajo de Pomodoro completado. Toma un descanso corto de " + customShortMin + " minutos.";
+              }
+            } else {
+              nextMode = "trabajo";
+              nextSeconds = customWorkMin * 60;
+              message = "⏰ ¡El descanso ha terminado! De vuelta al trabajo enfocado.";
+            }
+
+            setPomodoroMode(nextMode);
+            setPomodoroTime(nextSeconds);
+            addSystemNotification(message, "success");
+            return nextSeconds;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (interval) clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [pomodoroActive, pomodoroMode, customWorkMin, customShortMin, customLongMin, pomodoroCycles]);
+
+  const handleUpdateDuration = (mode: "trabajo" | "corto" | "largo", mins: number) => {
+    const val = Math.max(1, Math.min(180, mins));
+    if (mode === "trabajo") {
+      setCustomWorkMin(val);
+      if (pomodoroMode === "trabajo") setPomodoroTime(val * 60);
+    } else if (mode === "corto") {
+      setCustomShortMin(val);
+      if (pomodoroMode === "corto") setPomodoroTime(val * 60);
+    } else if (mode === "largo") {
+      setCustomLongMin(val);
+      if (pomodoroMode === "largo") setPomodoroTime(val * 60);
+    }
+  };
+
+  const setFixedMode = (mode: "trabajo" | "corto" | "largo") => {
+    setPomodoroActive(false);
+    setPomodoroMode(mode);
+    if (mode === "trabajo") setPomodoroTime(customWorkMin * 60);
+    else if (mode === "corto") setPomodoroTime(customShortMin * 60);
+    else if (mode === "largo") setPomodoroTime(customLongMin * 60);
+  };
+
+  const handleAwardClassPomodoroBonus = () => {
+    if (activeStudents.length === 0) {
+      addSystemNotification("No hay estudiantes activos para premiar.", "warning");
+      return;
+    }
+
+    activeStudents.forEach((student) => {
+      const logObj: BehaviorLog = {
+        id: `pomodoro-bonus-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        date: new Date().toISOString().split("T")[0],
+        type: "positivo",
+        tag: "Enfoque Profundo",
+        description: pomodoroTask 
+          ? `Ciclo de Pomodoro enfocado en: "${pomodoroTask}"` 
+          : "Ciclo de Pomodoro de clase completado con éxito.",
+        points: 5
+      };
+      onAwardPoints(student.id, logObj, 5);
+    });
+
+    addSystemNotification(`🎯 ¡Exitoso! Se ha otorgado +5 puntos de karma de "Enfoque Profundo" a todos los ${activeStudents.length} alumnos activos del aula.`, "success");
+  };
 
   // Filter students active list (to work purely on present pupils)
   const activeStudents = useMemo(() => students.filter(s => s.status === "Activo"), [students]);
@@ -162,7 +347,7 @@ export default function ClassManagement({
     const catalogItem = BEHAVIOR_CATALOG[selectedRewardIdx];
 
     const newLog: BehaviorLog = {
-      id: `log-wheel-${Date.now()}`,
+      id: `log-wheel-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       date: new Date().toISOString().split("T")[0],
       type: catalogItem.type as any,
       tag: catalogItem.tag,
@@ -236,7 +421,7 @@ export default function ClassManagement({
     if (!targetStudent) return;
 
     const newLog: BehaviorLog = {
-      id: `log-direct-${Date.now()}`,
+      id: `log-direct-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       date: new Date().toISOString().split("T")[0],
       type: catalogItem.type as any,
       tag: catalogItem.tag,
@@ -277,7 +462,8 @@ export default function ClassManagement({
             { id: "attendance", label: "📄 CONTROL ASISTENCIA", icon: Calendar },
             { id: "wheel", label: "🎡 RULETA PARTICIPACIÓN", icon: Volume2 },
             { id: "groups", label: "🎲 GENERADOR DE GRUPOS", icon: Dices },
-            { id: "behaviors", label: "★ HISTORIAL Y CONDUCTAS", icon: Zap }
+            { id: "behaviors", label: "★ HISTORIAL Y CONDUCTAS", icon: Zap },
+            { id: "pomodoro", label: "⏱️ POMODORO ENFOQUE", icon: Clock }
           ].map((item) => {
             const Icon = item.icon;
             const active = activeSubTab === item.id;
@@ -310,16 +496,24 @@ export default function ClassManagement({
               <h3 className="text-lg font-black uppercase">Planilla de Asistencia Diaria</h3>
             </div>
             
-            {/* Date Picker Input */}
-            <div className="flex items-center gap-2 bg-white neo-border-thin p-1">
-              <span className="font-mono text-xs px-2 font-black">FECHA:</span>
-              <input 
-                type="date" 
-                id="attendance-date-picker"
-                value={attendanceDate}
-                onChange={(e) => setAttendanceDate(e.target.value)}
-                className="font-mono text-xs focus:outline-none p-1.5"
-              />
+            {/* Date Picker Input & Print */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => { window.focus(); window.print(); }}
+                className="neo-btn bg-white hover:bg-gray-100 text-[#1A1A1A] py-1.5 px-3 neo-border-thin flex items-center gap-1 text-[11px] font-mono cursor-pointer shadow-sm"
+              >
+                <Printer className="w-3.5 h-3.5 text-bauhaus-blue font-bold" /> IMPRIMIR ASISTENCIA
+              </button>
+              <div className="flex items-center gap-2 bg-white neo-border-thin p-1">
+                <span className="font-mono text-xs px-2 font-black">FECHA:</span>
+                <input 
+                  type="date" 
+                  id="attendance-date-picker"
+                  value={attendanceDate}
+                  onChange={(e) => setAttendanceDate(e.target.value)}
+                  className="font-mono text-xs focus:outline-none p-1.5"
+                />
+              </div>
             </div>
           </div>
 
@@ -665,9 +859,19 @@ export default function ClassManagement({
       {/* Tab 3: GROUP GENERATOR */}
       {activeSubTab === "groups" && (
         <div className="bg-white neo-border p-6 neo-shadow space-y-6">
-          <div className="flex items-center gap-2 border-b-2 border-black pb-3">
-            <Dices className="w-5 h-5 text-bauhaus-blue animate-bounce" />
-            <h3 className="text-lg font-black uppercase">Generador de Equipos de Aprendizaje</h3>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-black pb-3">
+            <div className="flex items-center gap-2">
+              <Dices className="w-5 h-5 text-bauhaus-blue animate-bounce" />
+              <h3 className="text-lg font-black uppercase">Generador de Equipos de Aprendizaje</h3>
+            </div>
+            {generatedGroups.length > 0 && (
+              <button
+                onClick={() => { window.focus(); window.print(); }}
+                className="neo-btn bg-white hover:bg-gray-100 text-[#1A1A1A] py-1 px-3 neo-border-thin flex items-center gap-1 text-[10px] font-mono cursor-pointer shadow-sm"
+              >
+                <Printer className="w-3.5 h-3.5 text-bauhaus-blue font-bold" /> IMPRIMIR GRUPOS
+              </button>
+            )}
           </div>
 
           <p className="text-xs font-mono text-gray-500">
@@ -901,6 +1105,670 @@ export default function ClassManagement({
           </div>
         </form>
       )}
+
+      {/* Tab 5: POMODORO Y TIEMPO ENFOQUE */}
+      {activeSubTab === "pomodoro" && (
+        <div className="space-y-6">
+          {/* Internal Tool Toggle (Pomodoro vs classroom Activity timer) */}
+          <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-gray-100 neo-border">
+            <button
+              id="btn-switch-pomodoro"
+              onClick={() => setActiveTimerTool("pomodoro")}
+              className={`flex-1 py-1.5 text-center font-mono text-[10px] font-black uppercase cursor-pointer transition-colors border ${
+                activeTimerTool === "pomodoro" ? "bg-[#1A1A1A] text-white border-black" : "bg-white text-gray-600 hover:bg-gray-100 border-gray-300"
+              }`}
+            >
+              🍅 MÉTODO POMODORO
+            </button>
+            <button
+              id="btn-switch-classroom-timer"
+              onClick={() => setActiveTimerTool("classroom_timer")}
+              className={`flex-1 py-1.5 text-center font-mono text-[10px] font-black uppercase cursor-pointer transition-colors border ${
+                activeTimerTool === "classroom_timer" ? "bg-[#1A1A1A] text-white border-black" : "bg-white text-gray-600 hover:bg-gray-100 border-gray-300"
+              }`}
+            >
+              ⏱️ TEMPORIZADOR DE ACTIVIDADES
+            </button>
+          </div>
+
+          {activeTimerTool === "classroom_timer" ? (
+            /* CLASSROOM TEMPORIZADOR Y CRONOMETRO */
+            <div className="bg-white neo-border p-6 neo-shadow space-y-8">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-black pb-4">
+                <div className="flex items-center gap-2">
+                  <Monitor className="w-6 h-6 text-bauhaus-blue animate-pulse" />
+                  <div>
+                    <h3 className="text-lg font-black uppercase">Temporizador y Cronómetro de Actividades</h3>
+                    <p className="text-[10px] font-mono text-gray-500 uppercase">
+                      Gestione dinámicamente y con precisión el avance de sus exámenes, dinámicas o lecturas del aula.
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <button
+                    id="btn-projector-classroom-timer"
+                    onClick={() => {
+                      setProjectorModeActive(true);
+                      addSystemNotification("Visualización para Proyector activada.", "info");
+                    }}
+                    className="neo-btn bg-bauhaus-blue text-white hover:bg-blue-600 py-1.5 px-3 neo-border-thin font-mono text-[11px] uppercase font-black cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Monitor className="w-4 h-4" /> 📺 PROYECTAR EN GRANDE
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left side: Beautiful counter */}
+                <div className="lg:col-span-7 flex flex-col items-center justify-center p-6 bg-zinc-50 neo-border relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-2 bg-bauhaus-blue" />
+                  
+                  <div className="text-center space-y-5 w-full">
+                    {/* Mode Toggle */}
+                    <div className="inline-flex rounded-sm p-1 bg-gray-200 neo-border-thin gap-1">
+                      <button
+                        onClick={() => {
+                          setClassroomTimerActive(false);
+                          setClassroomTimerType("countdown");
+                          setClassroomTimerSeconds(classroomTimerInputMin * 60);
+                        }}
+                        className={`px-3 py-1 font-mono text-[10px] uppercase font-black cursor-pointer ${
+                          classroomTimerType === "countdown" ? "bg-[#1A1A1A] text-white" : "hover:bg-gray-300"
+                        }`}
+                      >
+                        ⏱️ Cuenta Atrás
+                      </button>
+                      <button
+                        onClick={() => {
+                          setClassroomTimerActive(false);
+                          setClassroomTimerType("stopwatch");
+                          setClassroomTimerSeconds(0);
+                        }}
+                        className={`px-3 py-1 font-mono text-[10px] uppercase font-black cursor-pointer ${
+                          classroomTimerType === "stopwatch" ? "bg-[#1A1A1A] text-white" : "hover:bg-gray-300"
+                        }`}
+                      >
+                        ⏱️ Cronómetro
+                      </button>
+                    </div>
+
+                    {/* Task Title Input */}
+                    <div className="max-w-md mx-auto">
+                      <label className="block text-[9px] font-mono font-black text-gray-500 uppercase mb-1">
+                        Nombre de la Actividad Escolar
+                      </label>
+                      <input
+                        type="text"
+                        value={classroomTimerTask}
+                        onChange={(e) => setClassroomTimerTask(e.target.value)}
+                        placeholder="Ej: Examen de Lectura, Dinámica de Grupo..."
+                        className="w-full text-center bg-white neo-border-thin p-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-black placeholder-gray-400 text-black font-extrabold border border-black"
+                      />
+                    </div>
+
+                    {/* Timer Big Display */}
+                    <div className="py-2 select-none">
+                      <h2 className="text-6xl md:text-7xl font-black font-mono tracking-tighter text-[#1A1A1A]">
+                        {(() => {
+                          const mins = Math.floor(classroomTimerSeconds / 60);
+                          const secs = classroomTimerSeconds % 60;
+                          return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+                        })()}
+                      </h2>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="flex justify-center items-center gap-3">
+                      <button
+                        onClick={() => setClassroomTimerActive(!classroomTimerActive)}
+                        className={`neo-btn py-2 px-5 neo-border text-xs font-black uppercase flex items-center gap-2 cursor-pointer ${
+                          classroomTimerActive ? "bg-amber-100 text-amber-800" : "bg-bauhaus-blue text-white"
+                        }`}
+                      >
+                        {classroomTimerActive ? (
+                          <>
+                            <Pause className="w-3.5 h-3.5" />
+                            <span>Pausar</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            <span>Iniciar</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setClassroomTimerActive(false);
+                          setClassroomTimerSeconds(classroomTimerType === "countdown" ? classroomTimerInputMin * 60 : 0);
+                        }}
+                        className="neo-btn bg-white hover:bg-gray-100 text-gray-800 py-2 px-4 neo-border text-xs font-black uppercase flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Reiniciar</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Side: Configuration & Presets */}
+                <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
+                  {/* Preset Buttons */}
+                  <div className="bg-white neo-border p-4 space-y-4">
+                    <h4 className="font-mono text-xs font-black uppercase border-b border-black pb-2 text-[#1A1A1A]">
+                      Plantillas Rápidas de Aula
+                    </h4>
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {[
+                        { title: "📄 Examen de Unidad", min: 45 },
+                        { title: "👥 Dinámica de Grupo", min: 20 },
+                        { title: "📖 Lectura Guiada", min: 10 },
+                        { title: "💡 Debate o Brainstorming", min: 5 },
+                        { title: "🧹 Limpieza y Clausura", min: 2 }
+                      ].map((preset) => (
+                        <button
+                          key={preset.title}
+                          onClick={() => {
+                            setClassroomTimerType("countdown");
+                            setClassroomTimerActive(false);
+                            setClassroomTimerTask(preset.title);
+                            setClassroomTimerInputMin(preset.min);
+                            setClassroomTimerSeconds(preset.min * 60);
+                            addSystemNotification(`Cargada actividad: "${preset.title}" (${preset.min}m)`, "info");
+                          }}
+                          className="p-2.5 neo-border-thin font-mono text-[11px] text-left flex items-center justify-between hover:bg-gray-55 cursor-pointer"
+                        >
+                          <span className="font-black truncate mr-2">{preset.title}</span>
+                          <span className="font-black text-bauhaus-blue whitespace-nowrap">{preset.min} min</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Manual Setting */}
+                  {classroomTimerType === "countdown" && (
+                    <div className="bg-gray-100 neo-border-thin p-4 space-y-3">
+                      <h4 className="font-mono text-[11px] font-black uppercase text-gray-700">
+                        Ajuste Manual de Temporizador
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={classroomTimerInputMin}
+                          onChange={(e) => {
+                            const val = Math.max(1, Math.min(240, parseInt(e.target.value) || 1));
+                            setClassroomTimerInputMin(val);
+                            if (!classroomTimerActive) setClassroomTimerSeconds(val * 60);
+                          }}
+                          className="w-20 bg-white neo-border-thin p-1.5 font-mono text-xs text-center focus:outline-none border border-black text-black font-bold"
+                          min={1}
+                          max={240}
+                        />
+                        <span className="font-mono text-xs">Minutos</span>
+                        <button
+                          onClick={() => {
+                            setClassroomTimerSeconds(classroomTimerInputMin * 60);
+                            addSystemNotification("Tiempo restablecido a " + classroomTimerInputMin + " minutos", "success");
+                          }}
+                          className="ml-auto px-3 py-1 font-mono text-[10px] font-black bg-white border border-[#1A1A1A] hover:bg-gray-150 uppercase cursor-pointer"
+                        >
+                          FIJAR
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reward presents */}
+                  <div className="bg-blue-50/50 neo-border-thin p-4 space-y-2">
+                    <h4 className="font-mono text-xs font-black text-bauhaus-blue uppercase">
+                      ★ Incentivo por Enfoque de Grupo
+                    </h4>
+                    <p className="font-mono text-[9px] text-gray-500 uppercase leading-normal">
+                      Si finalizan la actividad en orden y dentro del rango de tiempo, puede otorgar +3 puntos de karma de "Trabajo en Equipo" a toda la clase presente de forma inmediata:
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (activeStudents.length === 0) {
+                          addSystemNotification("No hay estudiantes activos para premiar.", "warning");
+                          return;
+                        }
+                        activeStudents.forEach((student) => {
+                          const logObj: BehaviorLog = {
+                            id: `activity-bonus-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                            date: new Date().toISOString().split("T")[0],
+                            type: "positivo",
+                            tag: "Trabajo en Equipo",
+                            description: `Completó exitosamente la actividad de: "${classroomTimerTask}"`,
+                            points: 3
+                          };
+                          onAwardPoints(student.id, logObj, 3);
+                        });
+                        addSystemNotification(`🎯 Otorgado +3 Karma a los ${activeStudents.length} estudiantes activos del aula`, "success");
+                      }}
+                      className="w-full text-center px-4 py-2.5 bg-bauhaus-blue hover:bg-blue-600 text-white font-mono text-[10px] uppercase font-bold neo-border-thin cursor-pointer"
+                    >
+                      Premiar Alumnos Presentes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* DEFAULT MODAL FOR POMODORO */
+            <div className="bg-white neo-border p-6 neo-shadow space-y-8">
+              {/* Proyector control on top corner of standard view */}
+              <div className="flex justify-end -mb-6 relative z-10">
+                <button
+                  id="btn-projector-pomodoro"
+                  onClick={() => {
+                    setProjectorModeActive(true);
+                    addSystemNotification("Modo proyector activado para Pomodoro.", "info");
+                  }}
+                  className="neo-btn bg-bauhaus-blue text-white hover:bg-blue-600 py-1.5 px-3 neo-border-thin font-mono text-[10px] uppercase font-black cursor-pointer flex items-center gap-1 shadow-sm"
+                >
+                  <Monitor className="w-3.5 h-3.5" /> PROYECTAR EN GRANDE
+                </button>
+              </div>
+
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-black pb-4">
+            <div className="flex items-center gap-2">
+              <Clock className="w-6 h-6 text-bauhaus-red animate-pulse" />
+              <div>
+                <h3 className="text-lg font-black uppercase">Temporizador Pomodoro para el Aula</h3>
+                <p className="text-[10px] font-mono text-gray-500 uppercase">
+                  Fomente sesiones de concentración profunda alternando con descansos estructurados en el aula de clase.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 bg-gray-100 p-1.5 neo-border-thin font-mono text-[10px] uppercase font-bold">
+              Ciclos Completados hoy: <span className="bg-bauhaus-blue text-white px-2 py-0.5 rounded-sm">{pomodoroCycles} 🍅</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Left side: Beautiful Huge Timer */}
+            <div className="lg:col-span-7 flex flex-col items-center justify-center p-6 bg-amber-50/40 neo-border relative overflow-hidden">
+              {/* Subtle top indicator bar */}
+              <div className={`absolute top-0 left-0 right-0 h-2 transition-colors ${
+                pomodoroMode === "trabajo" ? "bg-bauhaus-red" : pomodoroMode === "corto" ? "bg-bauhaus-green" : "bg-bauhaus-blue"
+              }`} />
+
+              <div className="text-center space-y-4 w-full">
+                {/* Active Mode Badge */}
+                <div className="inline-flex gap-1.5">
+                  <span className={`px-4 py-1.5 neo-border-thin font-mono text-xs font-black uppercase tracking-wider ${
+                    pomodoroMode === "trabajo" 
+                      ? "bg-red-100 text-red-800" 
+                      : pomodoroMode === "corto" 
+                        ? "bg-emerald-100 text-emerald-800" 
+                        : "bg-blue-100 text-blue-800"
+                  }`}>
+                    {pomodoroMode === "trabajo" ? "🎒 modo de trabajo" : pomodoroMode === "corto" ? "☕ descanso corto" : "🛋️ descanso largo"}
+                  </span>
+                </div>
+
+                {/* Focus input field */}
+                <div className="max-w-md mx-auto">
+                  <label className="block text-[9 px] font-mono font-black text-gray-500 uppercase mb-1">
+                    Tema o Tarea de Enfoque Activo
+                  </label>
+                  <input
+                    type="text"
+                    id="pomodoro-task-input"
+                    value={pomodoroTask}
+                    onChange={(e) => setPomodoroTask(e.target.value)}
+                    placeholder="Ej: Lectura silenciosa, Trabajo práctico, Resolución nº1..."
+                    className="w-full text-center bg-white neo-border-thin p-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-black placeholder-gray-400"
+                  />
+                </div>
+
+                {/* Huge Counter */}
+                <div className="py-6 select-none">
+                  <h1 className="text-7xl md:text-8xl font-black font-mono tracking-tighter text-[#1A1A1A] drop-shadow-sm transition-all animate-none">
+                    {(() => {
+                      const mins = Math.floor(pomodoroTime / 60);
+                      const secs = pomodoroTime % 60;
+                      return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+                    })()}
+                  </h1>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full max-w-md mx-auto bg-gray-200 neo-border-thin h-4 overflow-hidden p-0.5">
+                  <div 
+                    className={`h-full transition-all duration-1000 ${
+                      pomodoroMode === "trabajo" ? "bg-bauhaus-red" : pomodoroMode === "corto" ? "bg-bauhaus-green" : "bg-bauhaus-blue"
+                    }`}
+                    style={{ 
+                      width: `${Math.min(100, (pomodoroTime / ((pomodoroMode === "trabajo" ? customWorkMin : pomodoroMode === "corto" ? customShortMin : customLongMin) * 60)) * 100)}%` 
+                    }}
+                  />
+                </div>
+
+                {/* Main Action Controllers */}
+                <div className="flex flex-wrap justify-center items-center gap-3 pt-4">
+                  <button
+                    id="btn-pomodoro-toggle"
+                    onClick={() => setPomodoroActive(!pomodoroActive)}
+                    className={`neo-btn py-2.5 px-6 neo-border neo-shadow text-xs font-black uppercase flex items-center gap-2 cursor-pointer transition-all ${
+                      pomodoroActive 
+                        ? "bg-amber-100 text-amber-800 hover:bg-amber-200" 
+                        : "bg-[#1A1A1A] text-white hover:bg-gray-800"
+                    }`}
+                  >
+                    {pomodoroActive ? (
+                      <>
+                        <Pause className="w-4 h-4" />
+                        <span>Pausar</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 fill-white" />
+                        <span>Iniciar</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    id="btn-pomodoro-reset"
+                    onClick={() => {
+                      setPomodoroActive(false);
+                      setPomodoroTime((pomodoroMode === "trabajo" ? customWorkMin : pomodoroMode === "corto" ? customShortMin : customLongMin) * 60);
+                      addSystemNotification("Contador restablecido", "info");
+                    }}
+                    className="neo-btn bg-white hover:bg-gray-100 text-gray-800 py-2.5 px-4 neo-border neo-shadow text-xs font-black uppercase flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Reiniciar</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right side: Presets & Configurations */}
+            <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
+              {/* Presets Card */}
+              <div className="bg-white neo-border p-4 space-y-4">
+                <h4 className="font-mono text-xs font-black uppercase border-b border-black pb-2 text-[#1A1A1A]">
+                  Selección de Intervalos Rápidos
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2.5">
+                  <button
+                    id="btn-preset-trabajo"
+                    onClick={() => {
+                      setFixedMode("trabajo");
+                      addSystemNotification("Cambiado a modo de Trabajo Encoado", "info");
+                    }}
+                    className={`p-3 neo-border-thin font-mono text-xs text-left flex items-center justify-between cursor-pointer transition-all ${
+                      pomodoroMode === "trabajo" ? "bg-red-50 border-bauhaus-red outline outline-2 outline-bauhaus-red font-bold" : "hover:bg-zinc-50"
+                    }`}
+                  >
+                    <span>🍅 Trabajo Enfocado</span>
+                    <span className="font-bold text-gray-500">{customWorkMin} min</span>
+                  </button>
+
+                  <button
+                    id="btn-preset-corto"
+                    onClick={() => {
+                      setFixedMode("corto");
+                      addSystemNotification("Cambiado a Descanso Corto", "info");
+                    }}
+                    className={`p-3 neo-border-thin font-mono text-xs text-left flex items-center justify-between cursor-pointer transition-all ${
+                      pomodoroMode === "corto" ? "bg-emerald-50 border-bauhaus-green outline outline-2 outline-bauhaus-green font-bold" : "hover:bg-zinc-50"
+                    }`}
+                  >
+                    <span>☕ Descanso Corto</span>
+                    <span className="font-bold text-gray-500">{customShortMin} min</span>
+                  </button>
+
+                  <button
+                    id="btn-preset-largo"
+                    onClick={() => {
+                      setFixedMode("largo");
+                      addSystemNotification("Cambiado a Descanso Largo", "info");
+                    }}
+                    className={`p-3 neo-border-thin font-mono text-xs text-left flex items-center justify-between cursor-pointer transition-all ${
+                      pomodoroMode === "largo" ? "bg-blue-50 border-bauhaus-blue outline outline-2 outline-bauhaus-blue font-bold" : "hover:bg-zinc-50"
+                    }`}
+                  >
+                    <span>🛋️ Descanso Largo</span>
+                    <span className="font-bold text-gray-500">{customLongMin} min</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Adjust Durations Fields */}
+              <div className="bg-[#F5F5F0] neo-border-thin p-4 space-y-4">
+                <h4 className="font-mono text-[11px] font-black uppercase text-gray-700 border-b border-gray-300 pb-2">
+                  Personalizar Tiempos (Minutos)
+                </h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-mono font-bold text-gray-500 uppercase">Trabajo</label>
+                    <input
+                      type="number"
+                      id="input-work-min"
+                      value={customWorkMin}
+                      onChange={(e) => handleUpdateDuration("trabajo", parseInt(e.target.value) || 25)}
+                      className="w-full bg-white neo-border-thin p-1.5 font-mono text-xs text-center focus:outline-none"
+                      min={1}
+                      max={180}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-mono font-bold text-gray-500 uppercase">D. Corto</label>
+                    <input
+                      type="number"
+                      id="input-short-min"
+                      value={customShortMin}
+                      onChange={(e) => handleUpdateDuration("corto", parseInt(e.target.value) || 5)}
+                      className="w-full bg-white neo-border-thin p-1.5 font-mono text-xs text-center focus:outline-none"
+                      min={1}
+                      max={180}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[9px] font-mono font-bold text-gray-500 uppercase">D. Largo</label>
+                    <input
+                      type="number"
+                      id="input-long-min"
+                      value={customLongMin}
+                      onChange={(e) => handleUpdateDuration("largo", parseInt(e.target.value) || 15)}
+                      className="w-full bg-white neo-border-thin p-1.5 font-mono text-xs text-center focus:outline-none"
+                      min={1}
+                      max={180}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Reward whole class button */}
+              <div className="bg-amber-50 neo-border p-4 space-y-3">
+                <div className="space-y-1">
+                  <h4 className="font-mono text-xs font-black uppercase text-amber-800 flex items-center gap-1">
+                    <span>🎁 Recompensar Aula por Concentración</span>
+                  </h4>
+                  <p className="font-mono text-[9px] text-gray-500 uppercase leading-normal">
+                    Si el grupo se mantiene concentrado y cumple con el bloque de trabajo, puede premiar a todos los alumnos activos otorgándoles puntos de karma rápidamente:
+                  </p>
+                </div>
+                <button
+                  id="btn-pomodoro-award-group"
+                  onClick={handleAwardClassPomodoroBonus}
+                  className="w-full neo-btn bg-amber-400 hover:bg-amber-500 text-black py-2.5 px-3 neo-border-thin font-mono text-[10px] uppercase font-black cursor-pointer shadow-sm transition-colors"
+                >
+                  ★ Otorgar +5 Karma a toda la clase
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        )
+        }
+      </div>
+      )}
+
+      {/* Full screen Projector Mode Overlay */}
+      <AnimatePresence>
+        {projectorModeActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className={`fixed inset-0 z-50 flex flex-col justify-between p-8 md:p-14 select-none ${
+              projectorTheme === "dark" 
+                ? "bg-[#111111] text-[#FFD214]" 
+                : projectorTheme === "bauhaus"
+                  ? "bg-[#FFE0B2] text-[#D84315] border-8 border-[#3E2723]"
+                  : "bg-white text-black border-8 border-[#1A1A1A]"
+            }`}
+          >
+            {/* Top Bar info */}
+            <div className="flex items-center justify-between border-b border-current pb-4">
+              <div className="flex items-center gap-3">
+                <Monitor className="w-6 h-6 shrink-0 animate-pulse" />
+                <div>
+                  <h2 className="text-xs md:text-sm font-mono tracking-widest uppercase font-black font-extrabold pb-0.5">
+                    MODO PROYECTADO - EN ENFOQUE
+                  </h2>
+                  <p className="text-[10px] uppercase font-bold opacity-80 font-mono">
+                    {activeTimerTool === "pomodoro" ? "Método Pomodoro Escolar" : "Temporizador de Dinámica Activa"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Theme pickers & close buttons */}
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] font-mono uppercase font-black opacity-60 hidden sm:inline">Tema:</span>
+                <div className="flex items-center gap-1 border border-current p-1 bg-transparent">
+                  {(["dark", "light", "bauhaus"] as const).map((themeName) => (
+                    <button
+                      key={themeName}
+                      onClick={() => setProjectorTheme(themeName)}
+                      className={`px-2 py-0.5 font-mono text-[8px] uppercase font-bold border ${
+                        projectorTheme === themeName ? "bg-red-500 text-white border-red-500" : "hover:opacity-80"
+                      }`}
+                    >
+                      {themeName === "dark" ? "Oscuro" : themeName === "light" ? "Claro" : "Retro"}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  id="btn-projector-close"
+                  onClick={() => setProjectorModeActive(false)}
+                  className="px-3 py-1 font-mono text-[10px] font-black border-2 border-current bg-transparent hover:opacity-80 cursor-pointer uppercase transition-all"
+                >
+                  ✖ Salir Proyección
+                </button>
+              </div>
+            </div>
+
+            {/* Giant display of active timer */}
+            <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 md:space-y-8 my-4">
+              <div className="space-y-2 max-w-4xl px-4">
+                <h3 className="text-xl md:text-4xl font-mono uppercase font-black tracking-wider leading-tight">
+                  {activeTimerTool === "pomodoro" 
+                    ? (pomodoroTask ? `"${pomodoroTask}"` : "ENFOQUE Y COMPORTAMIENTO")
+                    : (classroomTimerTask ? `"${classroomTimerTask}"` : "ACTIVIDAD EN PROGRESO")
+                  }
+                </h3>
+                {activeTimerTool === "pomodoro" && (
+                  <span className="inline-block px-4 py-1 border border-current text-xs font-mono uppercase font-extrabold tracking-widest">
+                    {pomodoroMode === "trabajo" ? "🎒 MOMENTO TRABAJO" : pomodoroMode === "corto" ? "☕ DESCANSO CORTO" : "🛋️ DESCANSO LARGO"}
+                  </span>
+                )}
+                {activeTimerTool === "classroom_timer" && (
+                  <span className="inline-block px-4 py-1 border border-current text-xs font-mono uppercase font-extrabold tracking-widest">
+                    {classroomTimerType === "countdown" ? "⏱️ TIEMPO EN CUENTA ATRÁS" : "⏱️ CRONÓMETRO DE SEGUIMIENTO"}
+                  </span>
+                )}
+              </div>
+
+              {/* Giant countdown text */}
+              <div className="relative">
+                <h1 className={`text-[19vw] leading-none font-mono font-black tracking-tighter cursor-default transition-all ${
+                  activeTimerTool === "pomodoro"
+                    ? (pomodoroTime < 60 && pomodoroActive && pomodoroMode === "trabajo" ? "animate-pulse text-red-650 font-extrabold" : "")
+                    : (classroomTimerSeconds < 60 && classroomTimerActive && classroomTimerType === "countdown" ? "animate-pulse text-red-650 font-extrabold" : "")
+                }`}>
+                  {activeTimerTool === "pomodoro" ? (
+                    (() => {
+                      const mins = Math.floor(pomodoroTime / 60);
+                      const secs = pomodoroTime % 60;
+                      return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+                    })()
+                  ) : (
+                    (() => {
+                      const mins = Math.floor(classroomTimerSeconds / 60);
+                      const secs = classroomTimerSeconds % 60;
+                      return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+                    })()
+                  )}
+                </h1>
+                {/* Visual warning for final minutes */}
+                {(((activeTimerTool === "pomodoro" && pomodoroTime < 60 && pomodoroActive && pomodoroMode === "trabajo") ||
+                  (activeTimerTool === "classroom_timer" && classroomTimerSeconds < 60 && classroomTimerActive && classroomTimerType === "countdown"))) && (
+                  <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-red-600 text-white px-3 py-1 font-mono text-[9px] uppercase font-black tracking-widest animate-bounce">
+                    ⚠️ ¡ÚLTIMO MINUTO! ⚠️
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom mini actions for board control */}
+            <div className="border-t border-current pt-4 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                {activeTimerTool === "pomodoro" ? (
+                  <button
+                    onClick={() => {
+                      setPomodoroActive(false);
+                      setPomodoroTime((pomodoroMode === "trabajo" ? customWorkMin : pomodoroMode === "corto" ? customShortMin : customLongMin) * 60);
+                    }}
+                    className="px-4 py-2 border border-current text-[10px] font-mono font-black uppercase hover:bg-current hover:text-current-inverse cursor-pointer"
+                  >
+                    Restablecer
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setClassroomTimerActive(false);
+                      setClassroomTimerSeconds(classroomTimerType === "countdown" ? classroomTimerInputMin * 60 : 0);
+                    }}
+                    className="px-4 py-2 border border-current text-[10px] font-mono font-black uppercase hover:bg-current hover:text-current-inverse cursor-pointer"
+                  >
+                    Restablecer
+                  </button>
+                )}
+              </div>
+
+              {/* Giant Play/Pause button */}
+              <div>
+                {activeTimerTool === "pomodoro" ? (
+                  <button
+                    onClick={() => setPomodoroActive(!pomodoroActive)}
+                    className="px-10 py-3.5 border-2 border-current font-mono text-xs font-black uppercase hover:opacity-85 transition-all text-center"
+                  >
+                    {pomodoroActive ? "⏸ PAUSAR" : "▶ INICIAR"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setClassroomTimerActive(!classroomTimerActive)}
+                    className="px-10 py-3.5 border-2 border-current font-mono text-xs font-black uppercase hover:opacity-85 transition-all text-center"
+                  >
+                    {classroomTimerActive ? "⏸ PAUSAR" : "▶ INICIAR"}
+                  </button>
+                )}
+              </div>
+
+              <div className="text-right font-mono text-[9px] opacity-75 uppercase">
+                {activeTimerTool === "pomodoro" ? `Ciclos: ${pomodoroCycles} 🍅` : `${classroomTimerType === "countdown" ? "TEMPORIZADOR" : "CRONÓMETRO"}`}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

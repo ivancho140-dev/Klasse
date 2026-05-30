@@ -56,7 +56,7 @@ export default function StudentRegister({
     const generatedEmail = `${cleanFirst}.${cleanLast}@klasse-edu.com`;
 
     const newStudent: Student = {
-      id: `est-${Date.now()}`,
+      id: `est-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       name: formattedName,
       email: generatedEmail,
       avatar: "", 
